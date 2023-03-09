@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: rgb(0, 0, 0);
+        }
+
+        canvas {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        audio {
+            position: fixed;
+            left: 50px;
+            top: 80px;
+            border-radius: 0px;
+        }
+    </style>
+    <style>
+        .cssbuttons-io-button {
+            position: fixed !important;
+            left: 50px;
+            top: 20px;
+            background: #A370F0;
+            color: white;
+            font-family: inherit;
+            padding: 0.35em;
+            padding-left: 1.2em;
+            font-size: 17px;
+            font-weight: 500;
+            border-radius: 0.9em;
+            border: none;
+            letter-spacing: 0.05em;
+            display: flex;
+            align-items: center;
+            box-shadow: inset 0 0 1.6em -0.6em #714da6;
+            overflow: hidden;
+            position: relative;
+            height: 2.8em;
+            padding-right: 3.3em;
+        }
+
+        .cssbuttons-io-button:hover {
+            cursor: pointer;
+
+        }
+
+        .cssbuttons-io-button .icon {
+            background: white;
+            margin-left: 1em;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 2.2em;
+            width: 2.2em;
+            border-radius: 0.7em;
+            box-shadow: 0.1em 0.1em 0.6em 0.2em #7b52b9;
+            right: 0.3em;
+            transition: all 0.3s;
+        }
+
+        .cssbuttons-io-button:hover .icon {
+            width: calc(100% - 0.6em);
+        }
+
+        .cssbuttons-io-button .icon svg {
+            width: 1.1em;
+            transition: transform 0.3s;
+            color: #7b52b9;
+        }
+
+        .cssbuttons-io-button:hover .icon svg {
+            transform: translateX(0.1em);
+        }
+
+        .cssbuttons-io-button:active .icon {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+
+<body>
+    <canvas></canvas>
+    <button onclick="loadLocalAudio()" class="cssbuttons-io-button">引入音频文件
+        <div class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                <path fill="none" d="M0 0h24v24H0z"></path>
+                <path fill="currentColor"
+                    d="M16.172 11l-5.364-5.364 1.414-1.414L20 12l-7.778 7.778-1.414-1.414L16.172 13H4v-2z"></path>
+            </svg>
+        </div>
+    </button>
+    <audio src="" controls></audio>
+    <script>
+        // 创建一个文件上传input元素
+        const audioInput = document.createElement('input');
+        // 获取audio标签
+        const audioEle = document.querySelector('audio');
+        // 输出audio的play函数
+        console.dir(audioEle.play);
+        // 获取canvas上下文
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        // 加载本地音频
+        function loadLocalAudio() {
+            // 设置input类型为file
+            audioInput.type = 'file';
+            // 只允许选择音频文件
+            audioInput.accept = 'audio/*';
+            // 绑定change事件，选中文件后开始解析数据流
+            audioInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                const reader = new FileReader();
+                reader.addEventListener('load', () => {
+                    // 根据数据流创建新的URL并给<audio>元素赋值
+                    audioEle.src = URL.createObjectURL(file);
+                    // 开始播放
+                    audioEle.play();
+                });
+                reader.readAsDataURL(file); // 解析数据流
+            });
+            audioInput.click(); // 点击input元素弹出文件选择框
+        }
+
+        // 初始化画布大小
+        function initCanvas() {
+            canvas.width = window.innerWidth * window.devicePixelRatio;
+            canvas.height = window.innerHeight * window.devicePixelRatio;
+        }
+        initCanvas();
+
+        let isInit = false; // 分析器是否初始化完成，初始值设为false
+        let dataArray, analyser;
+
+        // 监听<audio>元素的onplay事件
+        audioEle.onplay = function () {
+            if (isInit) { // 已初始化过则跳过
+                return;
+            }
+            // 创建新的AudioContext实例
+            const audioCtx = new AudioContext();
+            // 创建MediaElementAudioSourceNode对象作为分析器的输入节点
+            const source = audioCtx.createMediaElementSource(audioEle);
+            // 创建分析器对象
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 512; // 设定变换后的长度（默认是2048）
+            // 分析器输出将被写入此Uin8Array数组中
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            // 将源连接到分析器
+            source.connect(analyser);
+            // 分析器输出连接到AudioContext.destination
+            analyser.connect(audioCtx.destination);
+            isInit = true; // 初始化结束
+        }
+
+        // 渲染画布
+        function draw() {
+            requestAnimationFrame(draw); // 动画渲染
+            const { width, height } = canvas;
+            ctx.clearRect(0, 0, width, height);
+            if (!isInit) {
+                return;
+            }
+            // 从analyser获取频率数据并写入dataArray
+            analyser.getByteFrequencyData(dataArray);
+            const len = dataArray.length / 2.5;
+            const barWidth = width / len / 2;
+            for (let i = 0; i <= len; i++) {
+                const data = dataArray[i];
+                const barHeight = data / 255 * height;
+                // 生成左半部分矩形
+                const x1 = i * barWidth + width / 2;
+                // 生成右半部分矩形
+                const x2 = width / 2 - (i + 1) * barWidth;
+                const y = height - barHeight;
+                ctx.fillRect(x1, y, barWidth - 1, barHeight);
+                ctx.fillRect(x2, y, barWidth - 1, barHeight);
+            }
+            // 改变字体颜色为图像的RGB值（当然只取其中一位数，因为后面两个数字不变）
+        }
+        draw();
+    </script>
+    <!-- 渐变 -->
+    <script>
+        let count = 0; // 计数器的初始值为0
+        let delta = 1; // 计数器每次增加或减少的值
+        let speed = 50;
+        function rainbowColor(step) {
+            // 将步长限制在 0 到 359 之间，避免溢出
+            step = step % 360;
+            // 计算红色分量
+            let red = 0;
+            if (step < 60) {
+                red = 255;
+            } else if (step < 120) {
+                red = 255 - Math.round((step - 60) / 60 * 255);
+            } else if (step < 240) {
+                red = 0;
+            } else if (step < 300) {
+                red = Math.round((step - 240) / 60 * 255);
+            } else {
+                red = 255;
+            }
+            // 计算绿色分量
+            let green = 0;
+            if (step < 60) {
+                green = Math.round(step / 60 * 255);
+            } else if (step < 180) {
+                green = 255;
+            } else if (step < 240) {
+                green = 255 - Math.round((step - 180) / 60 * 255);
+            } else {
+                green = 0;
+            }
+            // 计算蓝色分量
+            let blue = 0;
+            if (step < 120) {
+                blue = 0;
+            } else if (step < 180) {
+                blue = Math.round((step - 120) / 60 * 255);
+            } else if (step < 300) {
+                blue = 255;
+            } else {
+                blue = 255 - Math.round((step - 300) / 60 * 255);
+            }
+            // 返回 RGB 颜色值
+            return `rgb(${red}, ${green}, ${blue})`;
+        }
+        function loopCounter() {
+            count += delta; // 更新计数器的值
+            // 如果计数器超过了100或者小于了0，则改变增减方向
+            if (count >= 359 || count <= 0) {
+                delta = -delta; // 将增减方向反转
+            }
+            ctx.fillStyle = rainbowColor(count);
+            setTimeout(loopCounter, speed); // 每隔100毫秒继续执行 loopCounter 函数
+        }
+        loopCounter(); // 启动计数器
+    </script>
+</body>
+
+</html>
